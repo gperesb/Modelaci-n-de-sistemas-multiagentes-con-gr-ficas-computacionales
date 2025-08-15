@@ -1,0 +1,109 @@
+#Gabriel Peres Baptista A00839889
+import agentpy as ap
+import numpy as np
+import random
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from IPython.display import HTML
+
+# Parametros
+parameters = {
+    'shape': (10, 10),
+    'dirt_percentage': 0.5,
+    'n_agents': 1,
+    'steps': 100
+}
+# Robot de limpieza
+class CleaningAgent(ap.Agent):
+
+    def setup(self, env):
+        self.env = env
+
+    def get_position(self):
+        return np.array(self.env.positions[self])
+
+    def step(self):
+        pos = tuple(self.get_position())
+        # Limpiar si la celda está sucia
+        if self.model.dirt[pos] == 1:
+            self.model.dirt[pos] = 0
+            self.model.percent_clean = self.model.percent_clean + (100/(self.p.shape[0] * self.p.shape[1]))
+        else:
+            # Movimiento aleatorio
+            directions = [(-1, 0), (0, -1), (0, 1), (1, 0)]
+            dx, dy = random.choice(directions)
+            new_pos = (pos[0] + dx, pos[1] + dy)
+            # Validar límites
+            if (0 <= new_pos[0] < self.env.shape[0]) and (0 <= new_pos[1] < self.env.shape[1]):
+                self.env.move_to(self, new_pos)
+
+
+# Entorno
+class CleaningEnvironment(ap.Grid):
+    pass
+
+
+# Modelo
+class CleaningModel(ap.Model):
+
+    def setup(self):
+        self.env = CleaningEnvironment(self, self.p.shape)
+        # Inicializar suciedad
+        self.dirt = np.zeros(self.p.shape, dtype=int)
+        total_cells = self.p.shape[0] * self.p.shape[1]
+        dirty_cells = random.sample([(i, j) for i in range(self.p.shape[0]) 
+                                     for j in range(self.p.shape[1])],
+                                    int(self.p.dirt_percentage * total_cells))
+        for cell in dirty_cells:
+            self.dirt[cell] = 1
+
+        # Crear robots según parámetro
+        self.agents = ap.AgentList(self, self.p.n_agents, CleaningAgent, env=self.env)
+        self.env.add_agents(self.agents, positions=[(0, 0)] * self.p.n_agents)
+
+        # Variables de monitoreo
+        self.clean_time = None
+        self.total_moves = 0
+        self.percent_clean = (1-self.p.dirt_percentage)*100
+    def step(self):
+        self.agents.step()
+        self.total_moves += len(self.agents)
+
+        # Revisar si todo está limpio
+        if np.sum(self.dirt) == 0 and self.clean_time is None:
+            self.clean_time = self.t
+
+    def end(self):
+        if self.clean_time is None:
+            self.clean_time = self.p.steps
+
+# Graficar
+def my_plot(model, ax):
+    grid = np.copy(model.dirt)
+    for agent, pos in model.env.positions.items():
+        grid[pos] = -1  # Robot
+    cmap = ListedColormap(['white', 'gray', 'red'])  # limpio, sucio, robot
+    ax.imshow(grid, cmap=cmap, vmin=-1, vmax=1)
+    ax.set_title(f"Paso {model.t}")
+
+
+
+# Graficar
+def my_plot(model, ax):
+    grid = np.copy(model.dirt)
+    for agent, pos in model.env.positions.items():
+        grid[pos] = -1  # Robot
+    cmap = ListedColormap(['black', 'lightblue', 'gray'])  # robot limpio, sucio
+    ax.imshow(grid, cmap=cmap, vmin=-1, vmax=1)
+    ax.set_title(f"Paso {model.t}")
+
+#
+print("Tiempo de limpieza: " + str(model.clean_time))
+print("Pasos: " + str(model.total_moves))
+print("Porcentaje de limpieza: " + str(model.percent_clean) + "%")
+
+# Crear modelo y animación como video
+fig, ax = plt.subplots()
+model = CleaningModel(parameters)
+animation = ap.animate(model, fig, ax, my_plot)
+HTML(animation.to_jshtml())  # Muestra la animación como video
